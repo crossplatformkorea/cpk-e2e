@@ -2,10 +2,10 @@
   "name": "cpk-e2e",
   "version": "0.1.0",
   "description": "E2E render testing tool for cpk-ui React Native components",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/scripts/index.js",
+  "types": "dist/scripts/index.d.ts",
   "bin": {
-    "cpk-e2e": "dist/cli.js"
+    "cpk-e2e": "dist/scripts/cli.js"
   },
   "files": [
     "dist",

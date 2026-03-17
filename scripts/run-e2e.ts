@@ -2,7 +2,7 @@
  * E2E Test Orchestrator
  *
  * Full pipeline:
- * 1. Discover components from cpk-ui
+ * 1. Discover components from target project
  * 2. Build Storybook (if not already built)
  * 3. Check story coverage
  * 4. Run Playwright render tests
@@ -14,10 +14,11 @@
 import {execSync} from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import config from '../cpk-e2e.config';
 
 const ROOT = path.resolve(__dirname, '..');
-const CPK_UI_ROOT = path.resolve(__dirname, '../../cpk-ui');
-const STORYBOOK_STATIC = path.join(CPK_UI_ROOT, 'storybook-static');
+const TARGET_ROOT = path.resolve(ROOT, config.targetRoot);
+const STORYBOOK_STATIC = path.join(TARGET_ROOT, config.storybookStaticPath);
 
 const args = process.argv.slice(2);
 const skipBuild = args.includes('--skip-build');
@@ -32,7 +33,9 @@ function exec(cmd: string, cwd = ROOT) {
 }
 
 async function main() {
-  console.log('\n\x1b[1m🔍 CPK-UI E2E Test Runner\x1b[0m\n');
+  console.log('\n\x1b[1mCPK-UI E2E Test Runner\x1b[0m\n');
+  console.log('─'.repeat(60));
+  console.log(`Target: ${TARGET_ROOT}`);
   console.log('─'.repeat(60));
 
   // Step 1: Discover components
@@ -42,7 +45,7 @@ async function main() {
   // Step 2: Build Storybook
   if (!skipBuild || !fs.existsSync(STORYBOOK_STATIC)) {
     log('🏗️', 'Building Storybook...');
-    exec('STORYBOOK=1 npx storybook build', CPK_UI_ROOT);
+    exec(config.storybookBuildCommand, TARGET_ROOT);
   } else {
     log('⏭️', 'Skipping Storybook build (--skip-build)');
   }

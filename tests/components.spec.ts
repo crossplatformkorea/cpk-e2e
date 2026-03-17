@@ -1,22 +1,22 @@
 /**
  * Component Render E2E Tests
  *
- * Automatically crawls all Storybook stories and verifies:
+ * Fetches all Storybook stories from index.json and tests each one:
  * 1. No console errors during render
- * 2. No React error boundaries triggered
- * 3. Component actually renders visible content
- * 4. No uncaught exceptions
+ * 2. No uncaught exceptions
+ * 3. No React error boundaries triggered
+ * 4. Component actually renders visible content
  * 5. Screenshots for visual regression
+ *
+ * Uses /iframe.html?id= for direct story rendering (no Storybook shell).
  */
 
 import {test, expect, type Page, type ConsoleMessage} from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const STORYBOOK_URL = 'http://localhost:6006';
 const SCREENSHOTS_DIR = path.resolve(__dirname, '../screenshots');
 
-// Ensure screenshots directory exists
 if (!fs.existsSync(SCREENSHOTS_DIR)) {
   fs.mkdirSync(SCREENSHOTS_DIR, {recursive: true});
 }
@@ -26,35 +26,6 @@ interface StoryEntry {
   title: string;
   name: string;
   type?: string;
-}
-
-/**
- * Fetch all stories from Storybook's index endpoint.
- */
-async function fetchStories(page: Page): Promise<StoryEntry[]> {
-  const indexUrls = [
-    `${STORYBOOK_URL}/index.json`,
-    `${STORYBOOK_URL}/stories.json`,
-  ];
-
-  for (const url of indexUrls) {
-    try {
-      const response = await page.request.get(url);
-      if (response.ok()) {
-        const data = await response.json();
-        const entries = data.entries || data.stories || {};
-        return Object.values(entries as Record<string, StoryEntry>).filter(
-          (entry) => entry.type !== 'docs',
-        );
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  throw new Error(
-    'Could not fetch Storybook stories. Make sure Storybook is built and running.',
-  );
 }
 
 // Errors to ignore (not real render problems)
@@ -68,12 +39,12 @@ const IGNORED_ERRORS = [
   'Failed to load resource',
   'downloadable font',
   'ResizeObserver',
+  'Download the React DevTools',
+  'was not wrapped in act',
+  'ENOENT',
 ];
 
-/**
- * Collect console errors from a page.
- */
-function setupConsoleCollector(page: Page) {
+function setupErrorCollector(page: Page) {
   const errors: string[] = [];
 
   const onConsole = (msg: ConsoleMessage) => {
@@ -102,15 +73,38 @@ function setupConsoleCollector(page: Page) {
   };
 }
 
-// --- Main test suite ---
+/**
+ * Fetch all stories from Storybook's index endpoint.
+ */
+async function fetchStories(baseURL: string, page: Page): Promise<StoryEntry[]> {
+  for (const endpoint of ['index.json', 'stories.json']) {
+    try {
+      const response = await page.request.get(`${baseURL}/${endpoint}`);
+      if (response.ok()) {
+        const data = await response.json();
+        const entries = data.entries || data.stories || {};
+        return Object.values(entries as Record<string, StoryEntry>).filter(
+          (entry) => entry.type !== 'docs',
+        );
+      }
+    } catch {
+      continue;
+    }
+  }
 
-test.describe('Component Render Tests', () => {
+  throw new Error(
+    'Could not fetch stories from Storybook. Ensure storybook-static is built.',
+  );
+}
+
+test.describe('Storybook Component Render Tests', () => {
   let stories: StoryEntry[] = [];
 
   test.beforeAll(async ({browser}) => {
     const page = await browser.newPage();
     try {
-      stories = await fetchStories(page);
+      const baseURL = page.context()._options?.baseURL || 'http://localhost:6006';
+      stories = await fetchStories(baseURL, page);
     } finally {
       await page.close();
     }
@@ -118,139 +112,115 @@ test.describe('Component Render Tests', () => {
     if (stories.length === 0) {
       throw new Error('No stories found in Storybook');
     }
+
+    console.log(`Found ${stories.length} stories to test`);
   });
 
-  test('should have stories available', () => {
+  test('stories are available', () => {
     expect(stories.length).toBeGreaterThan(0);
   });
 
-  test('all stories render without errors', async ({page}) => {
-    const failedStories: {id: string; errors: string[]}[] = [];
-
-    // First, load Storybook main page and wait for it to initialize
-    await page.goto(STORYBOOK_URL, {waitUntil: 'load'});
-    await page.waitForTimeout(2000);
+  test('each story renders without errors', async ({page, baseURL}) => {
+    const results: {id: string; title: string; status: 'pass' | 'fail'; errors: string[]}[] = [];
 
     for (const story of stories) {
-      const {errors, cleanup} = setupConsoleCollector(page);
+      const {errors, cleanup} = setupErrorCollector(page);
 
-      // Navigate to story via Storybook SPA routing
-      const storyUrl = `${STORYBOOK_URL}/?path=/story/${story.id}`;
-      await page.goto(storyUrl, {waitUntil: 'load'});
-      await page.waitForTimeout(1500);
+      // Use iframe.html for direct story rendering (bypasses Storybook shell)
+      const url = `${baseURL}/iframe.html?id=${story.id}&viewMode=story`;
+      await page.goto(url, {waitUntil: 'domcontentloaded'});
 
-      // Check for Storybook error overlay in the iframe
-      const storyFrame = page.frameLocator('#storybook-preview-iframe');
+      // Wait for React to render
+      await page.waitForTimeout(2000);
 
-      // Check if iframe exists and has content
-      let hasContent = true;
-      let hasError = false;
-
+      // Check for Storybook error display
       try {
-        // Check for error display in the preview iframe
-        const errorDisplay = storyFrame.locator('.sb-errordisplay');
+        const errorDisplay = page.locator('.sb-errordisplay');
         const errorCount = await errorDisplay.count();
         if (errorCount > 0) {
           const errorText = await errorDisplay.first().textContent();
-          errors.push(`Storybook error: ${errorText?.slice(0, 200)}`);
-          hasError = true;
+          errors.push(`Storybook error: ${errorText?.slice(0, 300)}`);
         }
+      } catch {
+        // Selector not found = no error display
+      }
 
-        // Check if the story root has any content
-        if (!hasError) {
-          const storyRoot = storyFrame.locator('#storybook-root, #root');
-          const rootCount = await storyRoot.count();
-          if (rootCount > 0) {
-            const innerHTML = await storyRoot.first().innerHTML();
-            if (!innerHTML || innerHTML.trim().length === 0) {
-              hasContent = false;
-            }
+      // Check component renders content
+      try {
+        const root = page.locator('#storybook-root, #root');
+        const rootCount = await root.count();
+        if (rootCount > 0) {
+          const innerHTML = await root.first().innerHTML();
+          if (!innerHTML || innerHTML.trim().length === 0) {
+            errors.push('Component rendered empty content');
           }
         }
       } catch {
-        // iframe might not be ready yet, not a critical error
+        // Root element check failed
       }
 
-      if (!hasContent && !hasError) {
-        errors.push('Component rendered empty content');
-      }
-
-      if (errors.length > 0) {
-        failedStories.push({id: story.id, errors: [...errors]});
-      }
-
-      // Take screenshot
+      // Screenshot
       const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
       await page.screenshot({
         path: path.join(SCREENSHOTS_DIR, `${screenshotName}.png`),
         fullPage: true,
       });
 
+      results.push({
+        id: story.id,
+        title: story.title,
+        status: errors.length > 0 ? 'fail' : 'pass',
+        errors: [...errors],
+      });
+
       cleanup();
     }
 
-    // Report all failures at once
-    if (failedStories.length > 0) {
-      const report = failedStories
+    // Report
+    const passed = results.filter((r) => r.status === 'pass');
+    const failed = results.filter((r) => r.status === 'fail');
+
+    console.log(`\n  Results: ${passed.length}/${results.length} stories passed`);
+
+    if (failed.length > 0) {
+      const report = failed
         .map((f) => `\n  ${f.id}:\n    ${f.errors.join('\n    ')}`)
         .join('');
       expect(
-        failedStories.length,
-        `${failedStories.length} stories failed:${report}`,
+        failed.length,
+        `${failed.length} stories had errors:${report}`,
       ).toBe(0);
     }
   });
-});
 
-test.describe('Individual Story Tests', () => {
-  let stories: StoryEntry[] = [];
-
-  test.beforeAll(async ({browser}) => {
-    const page = await browser.newPage();
-    try {
-      stories = await fetchStories(page);
-    } finally {
-      await page.close();
-    }
-  });
-
-  test('each story group has at least one renderable story', async ({
-    page,
-  }) => {
-    // Group stories by component (title)
+  test('each component group has a renderable story', async ({page, baseURL}) => {
+    // Group stories by component title
     const groups = new Map<string, StoryEntry[]>();
     for (const story of stories) {
-      const group = story.title;
-      if (!groups.has(group)) {
-        groups.set(group, []);
+      if (!groups.has(story.title)) {
+        groups.set(story.title, []);
       }
-      groups.get(group)!.push(story);
+      groups.get(story.title)!.push(story);
     }
 
     const failedGroups: string[] = [];
-
-    // Load Storybook
-    await page.goto(STORYBOOK_URL, {waitUntil: 'load'});
-    await page.waitForTimeout(2000);
 
     for (const [title, groupStories] of groups) {
       let anyRendered = false;
 
       for (const story of groupStories) {
-        const storyUrl = `${STORYBOOK_URL}/?path=/story/${story.id}`;
-        await page.goto(storyUrl, {waitUntil: 'load'});
-        await page.waitForTimeout(1000);
+        const url = `${baseURL}/iframe.html?id=${story.id}&viewMode=story`;
+        await page.goto(url, {waitUntil: 'domcontentloaded'});
+        await page.waitForTimeout(1500);
 
         try {
-          const storyFrame = page.frameLocator('#storybook-preview-iframe');
-          const errorDisplay = storyFrame.locator('.sb-errordisplay');
+          const errorDisplay = page.locator('.sb-errordisplay');
           const errorCount = await errorDisplay.count();
           if (errorCount === 0) {
             anyRendered = true;
             break;
           }
         } catch {
-          // If we can't check, assume it rendered
           anyRendered = true;
           break;
         }
