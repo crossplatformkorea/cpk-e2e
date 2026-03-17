@@ -1,0 +1,23 @@
+{
+  "name": "cpk-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "E2E render testing tool for cpk-ui React Native components",
+  "scripts": {
+    "discover": "tsx scripts/discover-components.ts",
+    "check-coverage": "tsx scripts/check-coverage.ts",
+    "build-storybook": "cd ../cpk-ui && STORYBOOK=1 npx storybook build -o storybook-static",
+    "serve": "npx http-server ../cpk-ui/storybook-static -p 6006 --silent",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "e2e": "tsx scripts/run-e2e.ts",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.9.3"
+  }
+}
