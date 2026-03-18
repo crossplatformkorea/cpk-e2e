@@ -1,4 +1,7 @@
 import {defineConfig, devices} from '@playwright/test';
+import config from './cpk-e2e.config';
+
+const port = config.storybookPort;
 
 export default defineConfig({
   testDir: './tests',
@@ -13,7 +16,7 @@ export default defineConfig({
   timeout: 180_000,
 
   use: {
-    baseURL: 'http://localhost:6006',
+    baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',
   },
 
@@ -30,8 +33,8 @@ export default defineConfig({
 
   // Auto-start storybook server before tests
   webServer: {
-    command: 'npx http-server ../cpk-ui/storybook-static -p 6006 --silent',
-    port: 6006,
+    command: `npx http-server ${config.targetRoot}/${config.storybookStaticPath} -p ${port} --silent`,
+    port,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

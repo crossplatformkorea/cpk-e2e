@@ -39,11 +39,11 @@ function checkCoverage(): CoverageReport {
     const hasCoverage =
       comp.hasStory ||
       storyTitles.has(nameLower) ||
-      // Also check partial matches (e.g., "FloatingActionButtons" -> "fab")
+      // Check if a story title exactly matches the component name (case-insensitive)
       storyTitlesArray.some(
         (title) =>
-          title.includes(nameLower) ||
-          nameLower.includes(title.replace(/[-_]/g, '')),
+          title.replace(/[-_]/g, '') === nameLower ||
+          nameLower === title.replace(/[-_]/g, ''),
       );
 
     if (hasCoverage) {

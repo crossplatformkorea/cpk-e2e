@@ -271,7 +271,6 @@ function isActualComponent(
     name.endsWith('Ref') ||
     name.endsWith('Color') ||
     name.endsWith('Status') ||
-    name.endsWith('Item') ||
     name.endsWith('Names')
   ) {
     return false;
@@ -345,6 +344,7 @@ function checkHasTest(name: string, sourcePath: string): boolean {
     path.join(dir, `${name}.test.tsx`),
     path.join(dir, `${name}.test.ts`),
     path.join(dir, '__tests__', `${name}.test.tsx`),
+    path.join(dir, '__tests__', `${name}.test.ts`),
   ];
 
   const parentDir = path.basename(dir);

@@ -133,31 +133,31 @@ async function testStoriesRender(
   for (const story of stories) {
     const {errors, cleanup} = setupErrorCollector(page);
 
-    await page.goto(storyUrl(baseURL, story.id, theme), {
-      waitUntil: 'domcontentloaded',
-    });
-    await page.waitForLoadState('networkidle');
-
-    // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
     try {
-      const errorDisplay = page.locator('.sb-errordisplay');
-      const errorCount = await errorDisplay.count();
-      if (errorCount > 0) {
-        const errorText =
-          (await errorDisplay.first().textContent()) || '';
-        const isIgnored = IGNORED_ERRORS.some((ignore) =>
-          errorText.includes(ignore),
-        );
-        if (!isIgnored) {
-          errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
-        }
-      }
-    } catch {
-      // No error display = good
-    }
+      await page.goto(storyUrl(baseURL, story.id, theme), {
+        waitUntil: 'domcontentloaded',
+      });
+      await page.waitForLoadState('networkidle');
 
-    // Check component renders content (only if no error overlay)
-    if (theme === 'light') {
+      // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
+      try {
+        const errorDisplay = page.locator('.sb-errordisplay');
+        const errorCount = await errorDisplay.count();
+        if (errorCount > 0) {
+          const errorText =
+            (await errorDisplay.first().textContent()) || '';
+          const isIgnored = IGNORED_ERRORS.some((ignore) =>
+            errorText.includes(ignore),
+          );
+          if (!isIgnored) {
+            errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
+          }
+        }
+      } catch {
+        // No error display = good
+      }
+
+      // Check component renders content (only if no error overlay)
       try {
         const root = page.locator('#storybook-root, #root');
         const rootCount = await root.count();
@@ -173,15 +173,17 @@ async function testStoriesRender(
       } catch {
         // Root check failed
       }
-    }
 
-    // Screenshot
-    const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
-    const suffix = theme === 'dark' ? '--dark' : '';
-    await page.screenshot({
-      path: path.join(SCREENSHOTS_DIR, `${screenshotName}${suffix}.png`),
-      fullPage: true,
-    });
+      // Screenshot
+      const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
+      const suffix = theme === 'dark' ? '--dark' : '';
+      await page.screenshot({
+        path: path.join(SCREENSHOTS_DIR, `${screenshotName}${suffix}.png`),
+        fullPage: true,
+      });
+    } finally {
+      cleanup();
+    }
 
     results.push({
       id: story.id,
@@ -189,8 +191,6 @@ async function testStoriesRender(
       status: errors.length > 0 ? 'fail' : 'pass',
       errors: [...errors],
     });
-
-    cleanup();
   }
 
   const passed = results.filter((r) => r.status === 'pass');

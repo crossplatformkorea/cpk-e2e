@@ -85,11 +85,15 @@ jobs:
         id: cpk-ui-hash
         run: echo "hash=$(cd ../cpk-ui && git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Get cpk-ui lock hash
+        id: cpk-ui-lock
+        run: echo "hash=$(cd ../cpk-ui && sha256sum bun.lock 2>/dev/null | cut -d' ' -f1 || echo 'no-lock')" >> "$GITHUB_OUTPUT"
+
       - name: Cache cpk-ui node_modules
         uses: actions/cache@v4
         with:
           path: ../cpk-ui/node_modules
-          key: cpk-ui-deps-${{ steps.cpk-ui-hash.outputs.hash }}
+          key: cpk-ui-deps-${{ steps.cpk-ui-lock.outputs.hash }}
           restore-keys: cpk-ui-deps-
 
       - name: Install cpk-ui dependencies

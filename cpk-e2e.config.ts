@@ -6,7 +6,7 @@
  */
 
 export interface CpkE2eConfig {
-  /** Path to the target UI library root (relative to this config file) */
+  /** Path to the target UI library root (relative to project root / cwd) */
   targetRoot: string;
 
   /** Path to the main index file that exports components (relative to targetRoot) */

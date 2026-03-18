@@ -10,18 +10,18 @@
  *   cpk-e2e run [--skip-build]         Full pipeline
  */
 
-import {execSync} from 'child_process';
+import {execFileSync} from 'child_process';
 import * as path from 'path';
 
 const args = process.argv.slice(2);
 const command = args[0];
-const restArgs = args.slice(1).join(' ');
+const restArgs = args.slice(1);
 
 const SCRIPTS_DIR = path.resolve(__dirname);
 
-function exec(cmd: string) {
+function exec(file: string, fileArgs: string[]) {
   try {
-    execSync(cmd, {stdio: 'inherit', cwd: process.cwd()});
+    execFileSync(file, fileArgs, {stdio: 'inherit', cwd: process.cwd()});
   } catch (err: unknown) {
     const code = (err as {status?: number}).status ?? 1;
     process.exit(code);
@@ -30,19 +30,19 @@ function exec(cmd: string) {
 
 switch (command) {
   case 'discover':
-    exec(`node ${path.join(SCRIPTS_DIR, 'discover-components.js')} ${restArgs}`);
+    exec('node', [path.join(SCRIPTS_DIR, 'discover-components.js'), ...restArgs]);
     break;
 
   case 'check-coverage':
-    exec(`node ${path.join(SCRIPTS_DIR, 'check-coverage.js')} ${restArgs}`);
+    exec('node', [path.join(SCRIPTS_DIR, 'check-coverage.js'), ...restArgs]);
     break;
 
   case 'test':
-    exec(`npx playwright test ${restArgs}`);
+    exec('npx', ['playwright', 'test', ...restArgs]);
     break;
 
   case 'run':
-    exec(`node ${path.join(SCRIPTS_DIR, 'run-e2e.js')} ${restArgs}`);
+    exec('node', [path.join(SCRIPTS_DIR, 'run-e2e.js'), ...restArgs]);
     break;
 
   default:

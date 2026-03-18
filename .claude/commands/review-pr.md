@@ -82,7 +82,6 @@ After completing modifications, automatically reply to each comment and resolve 
 
 ```bash
 # Get inline review comments with their IDs
-# Replace OWNER/REPO with the actual repository
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 gh api "repos/$REPO/pulls/$PR_NUMBER/comments" \
   --jq '.[] | {id: .id, path: .path, line: .line, body: .body[:100]}'
