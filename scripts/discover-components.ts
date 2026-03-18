@@ -1,7 +1,7 @@
 /**
  * Component Discovery
  *
- * Parses cpk-ui's source code to find all exported components.
+ * Parses the target project's source code to find all exported components.
  * Uses Storybook's index.json when available for accurate story mapping.
  *
  * Usage: tsx scripts/discover-components.ts [--json]
@@ -12,9 +12,9 @@ import * as path from 'path';
 import config from '../cpk-e2e.config';
 
 // Use process.cwd() so paths resolve correctly whether run via tsx or from dist/
-const CPK_UI_ROOT = path.resolve(process.cwd(), config.targetRoot);
-const INDEX_PATH = path.join(CPK_UI_ROOT, config.indexPath);
-const STORYBOOK_STATIC = path.join(CPK_UI_ROOT, config.storybookStaticPath);
+const TARGET_ROOT = path.resolve(process.cwd(), config.targetRoot);
+const INDEX_PATH = path.join(TARGET_ROOT, config.indexPath);
+const STORYBOOK_STATIC = path.join(TARGET_ROOT, config.storybookStaticPath);
 
 export interface ComponentInfo {
   name: string;
@@ -141,7 +141,7 @@ function resolveCategory(fromPath: string): string {
 }
 
 function resolveSourcePath(fromPath: string): string {
-  const srcDir = path.join(CPK_UI_ROOT, 'src');
+  const srcDir = path.join(TARGET_ROOT, 'src');
   const resolved = path.resolve(srcDir, fromPath);
   const candidates = [
     resolved + '.ts',

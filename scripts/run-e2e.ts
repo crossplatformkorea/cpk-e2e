@@ -34,7 +34,7 @@ function exec(cmd: string, cwd = ROOT) {
 }
 
 async function main() {
-  console.log('\n\x1b[1mCPK-UI E2E Test Runner\x1b[0m\n');
+  console.log('\n\x1b[1mE2E Test Runner\x1b[0m\n');
   console.log('─'.repeat(60));
   console.log(`Target: ${TARGET_ROOT}`);
   console.log('─'.repeat(60));

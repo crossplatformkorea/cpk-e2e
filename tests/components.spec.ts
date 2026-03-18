@@ -140,10 +140,12 @@ async function testStoriesRender(
       await page.waitForLoadState('networkidle');
 
       // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
+      let hasErrorOverlay = false;
       try {
         const errorDisplay = page.locator('.sb-errordisplay');
         const errorCount = await errorDisplay.count();
         if (errorCount > 0) {
+          hasErrorOverlay = true;
           const errorText =
             (await errorDisplay.first().textContent()) || '';
           const isIgnored = IGNORED_ERRORS.some((ignore) =>
@@ -157,21 +159,20 @@ async function testStoriesRender(
         // No error display = good
       }
 
-      // Check component renders content (only if no error overlay)
-      try {
-        const root = page.locator('#storybook-root, #root');
-        const rootCount = await root.count();
-        if (rootCount > 0) {
-          const innerHTML = await root.first().innerHTML();
-          if (
-            (!innerHTML || innerHTML.trim().length === 0) &&
-            errors.length === 0
-          ) {
-            errors.push('Component rendered empty content');
+      // Check component renders content (skip if error overlay is present)
+      if (!hasErrorOverlay) {
+        try {
+          const root = page.locator('#storybook-root, #root');
+          const rootCount = await root.count();
+          if (rootCount > 0) {
+            const innerHTML = await root.first().innerHTML();
+            if (!innerHTML || innerHTML.trim().length === 0) {
+              errors.push('Component rendered empty content');
+            }
           }
+        } catch {
+          // Root check failed
         }
-      } catch {
-        // Root check failed
       }
 
       // Screenshot
