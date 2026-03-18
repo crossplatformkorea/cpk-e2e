@@ -11,7 +11,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import config from '../cpk-e2e.config';
 
-const CPK_UI_ROOT = path.resolve(__dirname, '..', config.targetRoot);
+// Use process.cwd() so paths resolve correctly whether run via tsx or from dist/
+const CPK_UI_ROOT = path.resolve(process.cwd(), config.targetRoot);
 const INDEX_PATH = path.join(CPK_UI_ROOT, config.indexPath);
 const STORYBOOK_STATIC = path.join(CPK_UI_ROOT, config.storybookStaticPath);
 

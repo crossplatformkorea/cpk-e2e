@@ -83,7 +83,8 @@ After completing modifications, automatically reply to each comment and resolve 
 ```bash
 # Get inline review comments with their IDs
 # Replace OWNER/REPO with the actual repository
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments \
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$REPO/pulls/$PR_NUMBER/comments" \
   --jq '.[] | {id: .id, path: .path, line: .line, body: .body[:100]}'
 ```
 
@@ -91,7 +92,8 @@ gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments \
 
 ```bash
 # Reply to a specific comment
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" \
   -X POST -f body="Fixed in $COMMIT_HASH. $DESCRIPTION"
 ```
 
@@ -107,11 +109,12 @@ gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
 After replying, resolve the thread using GraphQL:
 
 ```bash
-# Get unresolved thread IDs
-# Replace {owner} and {repo} with actual values
+# Get unresolved thread IDs (dynamically resolves repo owner/name)
+OWNER=$(gh repo view --json owner -q .owner.login)
+NAME=$(gh repo view --json name -q .name)
 gh api graphql -f query='
 query {
-  repository(owner: "{owner}", name: "{repo}") {
+  repository(owner: "'"$OWNER"'", name: "'"$NAME"'") {
     pullRequest(number: $PR_NUMBER) {
       reviewThreads(first: 50) {
         nodes {

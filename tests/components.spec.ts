@@ -114,9 +114,107 @@ function storyUrl(
   return url;
 }
 
-// ─── Light Mode Tests ─────────────────────────────────────
+/**
+ * Test all stories render without errors for a given theme.
+ */
+async function testStoriesRender(
+  page: Page,
+  baseURL: string,
+  stories: StoryEntry[],
+  theme: 'light' | 'dark',
+) {
+  const results: {
+    id: string;
+    title: string;
+    status: 'pass' | 'fail';
+    errors: string[];
+  }[] = [];
 
-test.describe('Component Render Tests (Light)', () => {
+  for (const story of stories) {
+    const {errors, cleanup} = setupErrorCollector(page);
+
+    await page.goto(storyUrl(baseURL, story.id, theme), {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForLoadState('networkidle');
+
+    // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
+    try {
+      const errorDisplay = page.locator('.sb-errordisplay');
+      const errorCount = await errorDisplay.count();
+      if (errorCount > 0) {
+        const errorText =
+          (await errorDisplay.first().textContent()) || '';
+        const isIgnored = IGNORED_ERRORS.some((ignore) =>
+          errorText.includes(ignore),
+        );
+        if (!isIgnored) {
+          errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
+        }
+      }
+    } catch {
+      // No error display = good
+    }
+
+    // Check component renders content (only if no error overlay)
+    if (theme === 'light') {
+      try {
+        const root = page.locator('#storybook-root, #root');
+        const rootCount = await root.count();
+        if (rootCount > 0) {
+          const innerHTML = await root.first().innerHTML();
+          if (
+            (!innerHTML || innerHTML.trim().length === 0) &&
+            errors.length === 0
+          ) {
+            errors.push('Component rendered empty content');
+          }
+        }
+      } catch {
+        // Root check failed
+      }
+    }
+
+    // Screenshot
+    const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
+    const suffix = theme === 'dark' ? '--dark' : '';
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `${screenshotName}${suffix}.png`),
+      fullPage: true,
+    });
+
+    results.push({
+      id: story.id,
+      title: story.title,
+      status: errors.length > 0 ? 'fail' : 'pass',
+      errors: [...errors],
+    });
+
+    cleanup();
+  }
+
+  const passed = results.filter((r) => r.status === 'pass');
+  const failed = results.filter((r) => r.status === 'fail');
+  const label = theme === 'dark' ? 'Dark mode' : 'Results';
+
+  console.log(
+    `\n  ${label}: ${passed.length}/${results.length} stories passed`,
+  );
+
+  if (failed.length > 0) {
+    const report = failed
+      .map((f) => `\n  ${f.id}:\n    ${f.errors.join('\n    ')}`)
+      .join('');
+    expect(
+      failed.length,
+      `${failed.length} stories had ${theme} mode errors:${report}`,
+    ).toBe(0);
+  }
+}
+
+// ─── Tests ────────────────────────────────────────────────
+
+test.describe('Component Render Tests', () => {
   let stories: StoryEntry[] = [];
 
   test.beforeAll(async ({browser, baseURL}) => {
@@ -138,90 +236,12 @@ test.describe('Component Render Tests (Light)', () => {
     expect(stories.length).toBeGreaterThan(0);
   });
 
-  test('each story renders without errors', async ({page, baseURL}) => {
-    const results: {
-      id: string;
-      title: string;
-      status: 'pass' | 'fail';
-      errors: string[];
-    }[] = [];
+  test('each story renders without errors (light)', async ({page, baseURL}) => {
+    await testStoriesRender(page, baseURL!, stories, 'light');
+  });
 
-    for (const story of stories) {
-      const {errors, cleanup} = setupErrorCollector(page);
-
-      await page.goto(storyUrl(baseURL!, story.id, 'light'), {
-        waitUntil: 'domcontentloaded',
-      });
-      await page.waitForLoadState('networkidle');
-
-      // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
-      try {
-        const errorDisplay = page.locator('.sb-errordisplay');
-        const errorCount = await errorDisplay.count();
-        if (errorCount > 0) {
-          const errorText = await errorDisplay.first().textContent() || '';
-          const isIgnored = IGNORED_ERRORS.some((ignore) =>
-            errorText.includes(ignore),
-          );
-          if (!isIgnored) {
-            errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
-          }
-        }
-      } catch {
-        // No error display = good
-      }
-
-      // Check component renders content (only if no error overlay)
-      try {
-        const root = page.locator('#storybook-root, #root');
-        const rootCount = await root.count();
-        if (rootCount > 0) {
-          const innerHTML = await root.first().innerHTML();
-          // Allow empty if there was a known/ignored error
-          if (
-            (!innerHTML || innerHTML.trim().length === 0) &&
-            errors.length === 0
-          ) {
-            errors.push('Component rendered empty content');
-          }
-        }
-      } catch {
-        // Root check failed
-      }
-
-      // Screenshot (light mode)
-      const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
-      await page.screenshot({
-        path: path.join(SCREENSHOTS_DIR, `${screenshotName}.png`),
-        fullPage: true,
-      });
-
-      results.push({
-        id: story.id,
-        title: story.title,
-        status: errors.length > 0 ? 'fail' : 'pass',
-        errors: [...errors],
-      });
-
-      cleanup();
-    }
-
-    const passed = results.filter((r) => r.status === 'pass');
-    const failed = results.filter((r) => r.status === 'fail');
-
-    console.log(
-      `\n  Results: ${passed.length}/${results.length} stories passed`,
-    );
-
-    if (failed.length > 0) {
-      const report = failed
-        .map((f) => `\n  ${f.id}:\n    ${f.errors.join('\n    ')}`)
-        .join('');
-      expect(
-        failed.length,
-        `${failed.length} stories had errors:${report}`,
-      ).toBe(0);
-    }
+  test('each story renders without errors (dark)', async ({page, baseURL}) => {
+    await testStoriesRender(page, baseURL!, stories, 'dark');
   });
 
   test('each component group has a renderable story', async ({
@@ -254,7 +274,6 @@ test.describe('Component Render Tests (Light)', () => {
             anyRendered = true;
             break;
           }
-          // Check if the error is a known/ignored issue
           const errorText =
             (await errorDisplay.first().textContent()) || '';
           const isIgnored = IGNORED_ERRORS.some((ignore) =>
@@ -279,81 +298,6 @@ test.describe('Component Render Tests (Light)', () => {
       expect(
         failedGroups.length,
         `Component groups with no renderable stories:\n  ${failedGroups.join('\n  ')}`,
-      ).toBe(0);
-    }
-  });
-});
-
-// ─── Dark Mode Tests ──────────────────────────────────────
-
-test.describe('Component Render Tests (Dark)', () => {
-  let stories: StoryEntry[] = [];
-
-  test.beforeAll(async ({browser, baseURL}) => {
-    const page = await browser.newPage();
-    try {
-      stories = await fetchStories(baseURL!, page);
-    } finally {
-      await page.close();
-    }
-  });
-
-  test('each story renders in dark mode without errors', async ({
-    page,
-    baseURL,
-  }) => {
-    const failed: {id: string; errors: string[]}[] = [];
-
-    for (const story of stories) {
-      const {errors, cleanup} = setupErrorCollector(page);
-
-      await page.goto(storyUrl(baseURL!, story.id, 'dark'), {
-        waitUntil: 'domcontentloaded',
-      });
-      await page.waitForLoadState('networkidle');
-
-      // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
-      try {
-        const errorDisplay = page.locator('.sb-errordisplay');
-        const errorCount = await errorDisplay.count();
-        if (errorCount > 0) {
-          const errorText = await errorDisplay.first().textContent() || '';
-          const isIgnored = IGNORED_ERRORS.some((ignore) =>
-            errorText.includes(ignore),
-          );
-          if (!isIgnored) {
-            errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
-          }
-        }
-      } catch {
-        // No error display = good
-      }
-
-      // Screenshot (dark mode)
-      const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
-      await page.screenshot({
-        path: path.join(SCREENSHOTS_DIR, `${screenshotName}--dark.png`),
-        fullPage: true,
-      });
-
-      if (errors.length > 0) {
-        failed.push({id: story.id, errors: [...errors]});
-      }
-
-      cleanup();
-    }
-
-    console.log(
-      `\n  Dark mode: ${stories.length - failed.length}/${stories.length} stories passed`,
-    );
-
-    if (failed.length > 0) {
-      const report = failed
-        .map((f) => `\n  ${f.id}:\n    ${f.errors.join('\n    ')}`)
-        .join('');
-      expect(
-        failed.length,
-        `${failed.length} stories had dark mode errors:${report}`,
       ).toBe(0);
     }
   });

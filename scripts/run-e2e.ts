@@ -16,7 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import config from '../cpk-e2e.config';
 
-const ROOT = path.resolve(__dirname, '..');
+// Use process.cwd() so paths resolve correctly whether run via tsx or from dist/
+const ROOT = process.cwd();
 const TARGET_ROOT = path.resolve(ROOT, config.targetRoot);
 const STORYBOOK_STATIC = path.join(TARGET_ROOT, config.storybookStaticPath);
 
