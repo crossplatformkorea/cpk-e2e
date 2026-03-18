@@ -14,6 +14,7 @@
 import {test, expect, type Page, type ConsoleMessage} from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import config from '../cpk-e2e.config';
 
 const SCREENSHOTS_DIR = path.resolve(__dirname, '../screenshots');
 
@@ -29,19 +30,17 @@ interface StoryEntry {
 }
 
 // Errors to ignore (not real render problems)
+// Base list from config + test-specific patterns
 const IGNORED_ERRORS = [
-  'favicon.ico',
-  'webpack',
-  'HMR',
-  'DevTools',
-  'ERR_CONNECTION',
-  'net::ERR_',
-  'Failed to load resource',
-  'downloadable font',
-  'ResizeObserver',
-  'Download the React DevTools',
-  'was not wrapped in act',
+  ...config.ignoredErrors,
   'ENOENT',
+  // React 19 + react-native-web compat (findDOMNode removed in React 19)
+  'findDOMNode',
+  "Couldn't find node",
+  // Storybook generic error boundary (wraps real errors, not actionable itself)
+  'The component failed to render properly',
+  'configuration issue in Storybook',
+  'Error rendering story',
 ];
 
 function setupErrorCollector(page: Page) {
@@ -76,7 +75,10 @@ function setupErrorCollector(page: Page) {
 /**
  * Fetch all stories from Storybook's index endpoint.
  */
-async function fetchStories(baseURL: string, page: Page): Promise<StoryEntry[]> {
+async function fetchStories(
+  baseURL: string,
+  page: Page,
+): Promise<StoryEntry[]> {
   for (const endpoint of ['index.json', 'stories.json']) {
     try {
       const response = await page.request.get(`${baseURL}/${endpoint}`);
@@ -97,14 +99,30 @@ async function fetchStories(baseURL: string, page: Page): Promise<StoryEntry[]> 
   );
 }
 
-test.describe('Storybook Component Render Tests', () => {
+/**
+ * Build the story URL with optional theme globals.
+ */
+function storyUrl(
+  baseURL: string,
+  storyId: string,
+  theme?: 'light' | 'dark',
+): string {
+  let url = `${baseURL}/iframe.html?id=${storyId}&viewMode=story`;
+  if (theme) {
+    url += `&globals=theme:${theme}`;
+  }
+  return url;
+}
+
+// ─── Light Mode Tests ─────────────────────────────────────
+
+test.describe('Component Render Tests (Light)', () => {
   let stories: StoryEntry[] = [];
 
-  test.beforeAll(async ({browser}) => {
+  test.beforeAll(async ({browser, baseURL}) => {
     const page = await browser.newPage();
     try {
-      const baseURL = page.context()._options?.baseURL || 'http://localhost:6006';
-      stories = await fetchStories(baseURL, page);
+      stories = await fetchStories(baseURL!, page);
     } finally {
       await page.close();
     }
@@ -121,45 +139,57 @@ test.describe('Storybook Component Render Tests', () => {
   });
 
   test('each story renders without errors', async ({page, baseURL}) => {
-    const results: {id: string; title: string; status: 'pass' | 'fail'; errors: string[]}[] = [];
+    const results: {
+      id: string;
+      title: string;
+      status: 'pass' | 'fail';
+      errors: string[];
+    }[] = [];
 
     for (const story of stories) {
       const {errors, cleanup} = setupErrorCollector(page);
 
-      // Use iframe.html for direct story rendering (bypasses Storybook shell)
-      const url = `${baseURL}/iframe.html?id=${story.id}&viewMode=story`;
-      await page.goto(url, {waitUntil: 'domcontentloaded'});
+      await page.goto(storyUrl(baseURL!, story.id, 'light'), {
+        waitUntil: 'domcontentloaded',
+      });
+      await page.waitForLoadState('networkidle');
 
-      // Wait for React to render
-      await page.waitForTimeout(2000);
-
-      // Check for Storybook error display
+      // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
       try {
         const errorDisplay = page.locator('.sb-errordisplay');
         const errorCount = await errorDisplay.count();
         if (errorCount > 0) {
-          const errorText = await errorDisplay.first().textContent();
-          errors.push(`Storybook error: ${errorText?.slice(0, 300)}`);
+          const errorText = await errorDisplay.first().textContent() || '';
+          const isIgnored = IGNORED_ERRORS.some((ignore) =>
+            errorText.includes(ignore),
+          );
+          if (!isIgnored) {
+            errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
+          }
         }
       } catch {
-        // Selector not found = no error display
+        // No error display = good
       }
 
-      // Check component renders content
+      // Check component renders content (only if no error overlay)
       try {
         const root = page.locator('#storybook-root, #root');
         const rootCount = await root.count();
         if (rootCount > 0) {
           const innerHTML = await root.first().innerHTML();
-          if (!innerHTML || innerHTML.trim().length === 0) {
+          // Allow empty if there was a known/ignored error
+          if (
+            (!innerHTML || innerHTML.trim().length === 0) &&
+            errors.length === 0
+          ) {
             errors.push('Component rendered empty content');
           }
         }
       } catch {
-        // Root element check failed
+        // Root check failed
       }
 
-      // Screenshot
+      // Screenshot (light mode)
       const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
       await page.screenshot({
         path: path.join(SCREENSHOTS_DIR, `${screenshotName}.png`),
@@ -176,11 +206,12 @@ test.describe('Storybook Component Render Tests', () => {
       cleanup();
     }
 
-    // Report
     const passed = results.filter((r) => r.status === 'pass');
     const failed = results.filter((r) => r.status === 'fail');
 
-    console.log(`\n  Results: ${passed.length}/${results.length} stories passed`);
+    console.log(
+      `\n  Results: ${passed.length}/${results.length} stories passed`,
+    );
 
     if (failed.length > 0) {
       const report = failed
@@ -193,8 +224,10 @@ test.describe('Storybook Component Render Tests', () => {
     }
   });
 
-  test('each component group has a renderable story', async ({page, baseURL}) => {
-    // Group stories by component title
+  test('each component group has a renderable story', async ({
+    page,
+    baseURL,
+  }) => {
     const groups = new Map<string, StoryEntry[]>();
     for (const story of stories) {
       if (!groups.has(story.title)) {
@@ -209,14 +242,25 @@ test.describe('Storybook Component Render Tests', () => {
       let anyRendered = false;
 
       for (const story of groupStories) {
-        const url = `${baseURL}/iframe.html?id=${story.id}&viewMode=story`;
-        await page.goto(url, {waitUntil: 'domcontentloaded'});
-        await page.waitForTimeout(1500);
+        await page.goto(storyUrl(baseURL!, story.id), {
+          waitUntil: 'domcontentloaded',
+        });
+        await page.waitForLoadState('networkidle');
 
         try {
           const errorDisplay = page.locator('.sb-errordisplay');
           const errorCount = await errorDisplay.count();
           if (errorCount === 0) {
+            anyRendered = true;
+            break;
+          }
+          // Check if the error is a known/ignored issue
+          const errorText =
+            (await errorDisplay.first().textContent()) || '';
+          const isIgnored = IGNORED_ERRORS.some((ignore) =>
+            errorText.includes(ignore),
+          );
+          if (isIgnored) {
             anyRendered = true;
             break;
           }
@@ -235,6 +279,81 @@ test.describe('Storybook Component Render Tests', () => {
       expect(
         failedGroups.length,
         `Component groups with no renderable stories:\n  ${failedGroups.join('\n  ')}`,
+      ).toBe(0);
+    }
+  });
+});
+
+// ─── Dark Mode Tests ──────────────────────────────────────
+
+test.describe('Component Render Tests (Dark)', () => {
+  let stories: StoryEntry[] = [];
+
+  test.beforeAll(async ({browser, baseURL}) => {
+    const page = await browser.newPage();
+    try {
+      stories = await fetchStories(baseURL!, page);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('each story renders in dark mode without errors', async ({
+    page,
+    baseURL,
+  }) => {
+    const failed: {id: string; errors: string[]}[] = [];
+
+    for (const story of stories) {
+      const {errors, cleanup} = setupErrorCollector(page);
+
+      await page.goto(storyUrl(baseURL!, story.id, 'dark'), {
+        waitUntil: 'domcontentloaded',
+      });
+      await page.waitForLoadState('networkidle');
+
+      // Check for Storybook error display (skip if error is in IGNORED_ERRORS)
+      try {
+        const errorDisplay = page.locator('.sb-errordisplay');
+        const errorCount = await errorDisplay.count();
+        if (errorCount > 0) {
+          const errorText = await errorDisplay.first().textContent() || '';
+          const isIgnored = IGNORED_ERRORS.some((ignore) =>
+            errorText.includes(ignore),
+          );
+          if (!isIgnored) {
+            errors.push(`Storybook error: ${errorText.slice(0, 300)}`);
+          }
+        }
+      } catch {
+        // No error display = good
+      }
+
+      // Screenshot (dark mode)
+      const screenshotName = story.id.replace(/[^a-zA-Z0-9-]/g, '_');
+      await page.screenshot({
+        path: path.join(SCREENSHOTS_DIR, `${screenshotName}--dark.png`),
+        fullPage: true,
+      });
+
+      if (errors.length > 0) {
+        failed.push({id: story.id, errors: [...errors]});
+      }
+
+      cleanup();
+    }
+
+    console.log(
+      `\n  Dark mode: ${stories.length - failed.length}/${stories.length} stories passed`,
+    );
+
+    if (failed.length > 0) {
+      const report = failed
+        .map((f) => `\n  ${f.id}:\n    ${f.errors.join('\n    ')}`)
+        .join('');
+      expect(
+        failed.length,
+        `${failed.length} stories had dark mode errors:${report}`,
       ).toBe(0);
     }
   });

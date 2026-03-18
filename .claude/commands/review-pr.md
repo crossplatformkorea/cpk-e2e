@@ -12,7 +12,7 @@ Reviews PR comments and applies feedback.
 
 ```text
 /review-pr 1
-/review-pr https://github.com/hyodotdev/CharChat/pull/1
+/review-pr https://github.com/crossplatformkorea/cpk-e2e/pull/1
 ```
 
 ## Arguments
@@ -53,12 +53,11 @@ Analyze review comments and classify them as:
 Run the following validation before commit:
 
 ```bash
-bun lint:all          # ESLint + i18n key validation
-npx jest --runInBand  # Unit tests
-bun typecheck         # TypeScript check
+bun run build         # TypeScript build
+bun run test          # Playwright tests (if applicable)
 ```
 
-All three must pass before committing.
+All checks must pass before committing.
 
 ### 4. Perform Code Modifications
 
@@ -67,8 +66,6 @@ For each comment:
 1. Understand the request
 2. Read related code
 3. Perform modification
-4. When adding/removing i18n keys, update `assets/langs/meta/{en,ko}.json`
-5. When deleting source files, delete corresponding test files in `test/`
 
 ### 5. Verify and Commit
 
@@ -85,7 +82,8 @@ After completing modifications, automatically reply to each comment and resolve 
 
 ```bash
 # Get inline review comments with their IDs
-gh api repos/hyodotdev/CharChat/pulls/$PR_NUMBER/comments \
+# Replace OWNER/REPO with the actual repository
+gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments \
   --jq '.[] | {id: .id, path: .path, line: .line, body: .body[:100]}'
 ```
 
@@ -93,7 +91,7 @@ gh api repos/hyodotdev/CharChat/pulls/$PR_NUMBER/comments \
 
 ```bash
 # Reply to a specific comment
-gh api repos/hyodotdev/CharChat/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
+gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies \
   -X POST -f body="Fixed in $COMMIT_HASH. $DESCRIPTION"
 ```
 
@@ -110,9 +108,10 @@ After replying, resolve the thread using GraphQL:
 
 ```bash
 # Get unresolved thread IDs
+# Replace {owner} and {repo} with actual values
 gh api graphql -f query='
 query {
-  repository(owner: "hyodotdev", name: "CharChat") {
+  repository(owner: "{owner}", name: "{repo}") {
     pullRequest(number: $PR_NUMBER) {
       reviewThreads(first: 50) {
         nodes {
@@ -152,7 +151,7 @@ When user runs `/review-pr 123`:
 3. **Execute**:
    - Code change request → Perform modification
    - Question → Ask user for clarification
-4. **Verify**: Run `bun lint:all && bun typecheck && npx jest --runInBand`
+4. **Verify**: Run `bun run build && bun run test`
 5. **Commit**: Commit modifications
 6. **Push**: Push commits to remote
 7. **Reply**: Reply to each fixed comment via GitHub API

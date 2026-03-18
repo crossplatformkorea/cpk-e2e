@@ -5,3 +5,5 @@ playwright-report/
 blob-report/
 screenshots/
 .claude/settings.local.json
+cpk-e2e.config.js
+cpk-e2e.config.d.ts

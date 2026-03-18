@@ -28,6 +28,7 @@ function checkCoverage(): CoverageReport {
 
   // Get unique story titles (lowercased for matching)
   const storyTitles = new Set(stories.map((s) => s.title.toLowerCase()));
+  const storyTitlesArray = Array.from(storyTitles);
 
   const covered: ComponentInfo[] = [];
   const uncovered: ComponentInfo[] = [];
@@ -39,7 +40,7 @@ function checkCoverage(): CoverageReport {
       comp.hasStory ||
       storyTitles.has(nameLower) ||
       // Also check partial matches (e.g., "FloatingActionButtons" -> "fab")
-      [...storyTitles].some(
+      storyTitlesArray.some(
         (title) =>
           title.includes(nameLower) ||
           nameLower.includes(title.replace(/[-_]/g, '')),

@@ -9,10 +9,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import config from '../cpk-e2e.config';
 
-const CPK_UI_ROOT = path.resolve(__dirname, '../../cpk-ui');
-const INDEX_PATH = path.join(CPK_UI_ROOT, 'src/index.tsx');
-const STORYBOOK_STATIC = path.join(CPK_UI_ROOT, 'storybook-static');
+const CPK_UI_ROOT = path.resolve(__dirname, '..', config.targetRoot);
+const INDEX_PATH = path.join(CPK_UI_ROOT, config.indexPath);
+const STORYBOOK_STATIC = path.join(CPK_UI_ROOT, config.storybookStaticPath);
 
 export interface ComponentInfo {
   name: string;
@@ -298,7 +299,7 @@ function isActualComponent(
 
     return compPatterns.some((p) => p.test(content));
   } catch {
-    return true;
+    return false;
   }
 }
 
